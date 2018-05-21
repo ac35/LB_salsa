@@ -23,12 +23,6 @@
 """
 
 import struct
-try:
-    import psyco
-    have_psyco = True
-    print 'psyco enabled'
-except:
-    have_psyco = False
     
 #-----------------------------------------------------------------------
 
@@ -61,10 +55,11 @@ class Salsa20(object):
         May 2009
     """
 
+    MAX_BLOCK_VALUE = ((1 << 32) - 1)
     TAU    = ( 0x61707865, 0x3120646e, 0x79622d36, 0x6b206574 )
     SIGMA  = ( 0x61707865, 0x3320646e, 0x79622d32, 0x6b206574 )
     ROUNDS = 12                         # 8, 12, 20
-
+    
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
     def __init__(self, key, iv='\x00'*8, rounds=ROUNDS):
@@ -87,90 +82,81 @@ class Salsa20(object):
             The default number of rounds is 12.
 
         """
-        self._key_setup(key)
-        self.iv_setup(iv)
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def _key_setup(self, key):
-        """ key is converted to a list of 4-byte unsigned integers
-            (32 bits).
-
-            Calling this routine with a key value effectively resets
-            the context/instance.  Be sure to set the iv as well.
-        """
-        if len(key) not in [16, 32]:
-            raise Exception('key must be either 16 or 32 bytes')
-        TAU   = self.TAU
-        SIGMA = self.SIGMA
-        key_state = [0]*16
-        if len(key) == 16:
-            k = list(struct.unpack('<4I', key))
-            key_state[0]  = TAU[0]
-            key_state[1]  = k[0]
-            key_state[2]  = k[1]
-            key_state[3]  = k[2]
-            key_state[4]  = k[3]
-            key_state[5]  = TAU[1]
-
-            key_state[10] = TAU[2]
-            key_state[11] = k[0]
-            key_state[12] = k[1]
-            key_state[13] = k[2]
-            key_state[14] = k[3]
-            key_state[15] = TAU[3]
-
-        elif len(key) == 32:
-            k = list(struct.unpack('<8I', key))
-            key_state[0]  = SIGMA[0]
-            key_state[1]  = k[0]
-            key_state[2]  = k[1]
-            key_state[3]  = k[2]
-            key_state[4]  = k[3]
-            key_state[5]  = SIGMA[1]
-
-            key_state[10] = SIGMA[2]
-            key_state[11] = k[4]
-            key_state[12] = k[5]
-            key_state[13] = k[6]
-            key_state[14] = k[7]
-            key_state[15] = SIGMA[3]
-        self.key_state = key_state  # panggil self._key_setup(key) di __init__()
-                                    # menginisialisasi self.key_state
-
-    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
-    def iv_setup(self, iv):
-        """ self.state and other working strucures are lists of
-            4-byte unsigned integers (32 bits).
-
-            The iv should never be reused with the same key value,
-            but it is not a secret.  Use date, time or some other
-            counter to be sure the iv is different each time, and
-            be sure to communicate the IV to the receiving party.
-            Prepending 8 bytes of iv to the ciphertext is the usual
-            way to do this.
-
-            Just as setting a new key value effectively resets the
-            context, setting the iv also resets the context with
-            the last key value entered.
-        """
+        self.key = key
+        
         if len(iv) != 8:
             raise Exception('iv must be 8 bytes')
-        iv_state = self.key_state[:]    # disini lanjut pake self.key_state
-        v = list(struct.unpack('<2I', iv))
-        iv_state[6] = v[0]
-        iv_state[7] = v[1]
-        iv_state[8] = 0
-        iv_state[9] = 0
-        self.state = iv_state   # panggil self.__iv_setup(iv) di __init__()
-                                # menginisialisasi self.state (state yang siap 
-                                # digunakan)
-        self.lastchunk = 64     # flag to ensure all but the last
-                                # chunks is a multiple of 64 bytes
+        # unpack iv
+        self.iv = list(struct.unpack('<2I', iv))
 
+        if len(self.key) not in [16, 32]:
+            raise Exception('key must be either 16 or 32 bytes')
+        # unpack key
+        if len(self.key) == 16:
+            self.k = list(struct.unpack('<4I', self.key))
+        elif len(self.key) == 32:
+            self.k = list(struct.unpack('<8I', self.key))
+        
+        # block-counter words set to 0 each
+        self.block_counter = [0, 0]
+        self.ROUNDS = rounds
+
+        self.initialize_state()
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 
+    def _expansion(self):
+        # check block counter word
+        if self.block_counter[0] <=  self.MAX_BLOCK_VALUE:
+            self.block_counter[0] += 1
+        else: # if overflow in block_counter[0]
+            self.block_counter[1] += 1 # carry to block_counter[1]
+            # not to exceed 2^70 x 2^64 = 2^134 data size ??? <<<<
+
+        self.state[8] = self.block_counter[0]
+        self.state[9] = self.block_counter[1]
+        
+        return self._salsa20_scramble()
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+
+    def initialize_state(self):
+        self.state = [0] * 16
+
+        if len(self.key) == 16:
+            self.state[0]  = self.TAU[0]
+            self.state[1]  = self.k[0]
+            self.state[2]  = self.k[1]
+            self.state[3]  = self.k[2]
+            self.state[4]  = self.k[3]
+            self.state[5]  = self.TAU[1]
+
+            self.state[10] = self.TAU[2]
+            self.state[11] = self.k[0]
+            self.state[12] = self.k[1]
+            self.state[13] = self.k[2]
+            self.state[14] = self.k[3]
+            self.state[15] = self.TAU[3]
+
+        elif len(self.key) == 32:
+            self.state[0]  = self.SIGMA[0]
+            self.state[1]  = self.k[0]
+            self.state[2]  = self.k[1]
+            self.state[3]  = self.k[2]
+            self.state[4]  = self.k[3]
+            self.state[5]  = self.SIGMA[1]
+
+            self.state[10] = self.SIGMA[2]
+            self.state[11] = self.k[4]
+            self.state[12] = self.k[5]
+            self.state[13] = self.k[6]
+            self.state[14] = self.k[7]
+            self.state[15] = self.SIGMA[3]
+        
+        self.state[6] = self.iv[0]
+        self.state[7] = self.iv[1]
+        
+    # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+            
+    
     def encrypt(self, datain):
         """ datain and dataout are bytestrings. <---- !!bytestrings!!
 
@@ -178,26 +164,19 @@ class Salsa20(object):
             the chunk size MUST be an exact multiple of 64 bytes.
             Only the final chunk may be less than an even multiple.
         """
-        if self.lastchunk != 64:
-            raise Exception('size of last chunk not a multiple of 64 bytes')
         dataout = ''
         stream  = ''
         while datain:
-            stream = self._salsa20_scramble();
-            self.state[8] += 1
-            if self.state[8] == 0:               # if overflow in state[8]
-                self.state[9] += 1               # carry to state[9]
-                # not to exceed 2^70 x 2^64 = 2^134 data size ??? <<<<
+            stream = self._expansion();
             dataout += self._xor(stream, datain[:64])
             if len(datain) <= 64:
-                self.lastchunk = len(datain)
                 return dataout
             datain = datain[64:]
         raise Exception('Huh?')
     decrypt = encrypt
 
     # - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-
+    
     def _ROL32(self, a,b):
         return ((a << b) | (a >> (32 - b))) & 0xffffffff
 
@@ -210,6 +189,7 @@ class Salsa20(object):
         x = self.state[:]    # makes a copy
         for i in xrange(self.ROUNDS):
             if i % 2 == 0:
+                # columnround
                 x[ 4] ^= self._ROL32( (x[ 0]+x[12]) & 0xffffffff,  7)
                 x[ 8] ^= self._ROL32( (x[ 4]+x[ 0]) & 0xffffffff,  9)
                 x[12] ^= self._ROL32( (x[ 8]+x[ 4]) & 0xffffffff, 13)
@@ -227,6 +207,7 @@ class Salsa20(object):
                 x[11] ^= self._ROL32( (x[ 7]+x[ 3]) & 0xffffffff, 13)
                 x[15] ^= self._ROL32( (x[11]+x[ 7]) & 0xffffffff, 18)
             if i % 2 == 1:
+                # rowround
                 x[ 1] ^= self._ROL32( (x[ 0]+x[ 3]) & 0xffffffff,  7)
                 x[ 2] ^= self._ROL32( (x[ 1]+x[ 0]) & 0xffffffff,  9)
                 x[ 3] ^= self._ROL32( (x[ 2]+x[ 1]) & 0xffffffff, 13)
@@ -261,13 +242,6 @@ class Salsa20(object):
             dout.append( chr( ord(stream[i]) ^ ord(din[i]) ) )
         return ''.join(dout)
 
-    if have_psyco:
-#        _key_setup = psyco.proxy(_key_setup)   # doesn't have much effect
-#        encrypt = psyco.proxy(encrypt)         # doesn't have much effect
-        _ROL32 = psyco.proxy(_ROL32)          # minor impact
-        _salsa20_scramble = psyco.proxy(_salsa20_scramble)  # big help, 2x
-        _xor = psyco.proxy(_xor)                # very small impact
-
 #-----------------------------------------------------------------------
 #-----------------------------------------------------------------------
 
@@ -284,7 +258,7 @@ def test():
             bs = bs[bpl:]
 
 
-    if 1:
+    if 0:
         print '-'*40
         key    = 'qwerty7890123456'
         iv     = 'iv345678'
@@ -298,10 +272,11 @@ def test():
         printlong('  data:', data, 64, 14)
         printlong('  ciphertext:', ciphertext, 64, 14)
 
-    if 0:
-        import sys
+    if 1:
+        import sys, time
         
         key = 'qwerty7890123456'
+        # key = 'qwerty7890111111' # wrong key
         iv = 'iv345678'
 
         input_file = open(sys.argv[1], 'rb')
@@ -311,11 +286,20 @@ def test():
         plaintext = input_data
         
         cipher = Salsa20(key, iv)
+        t0 = time.time()
         ciphertext = cipher.encrypt(plaintext)
+        t1 = time.time()
+        
+        tmpl1 = '  total time to encrypt %d bytes'
+        tmpl2 = ': %6.4f secs,'
+        tmpl3 = 'or about %dKB per sec'
         
         output_file = open(sys.argv[2], 'wb')
         output_file.write(ciphertext)
         output_file.close()
+        print tmpl1 % (len(plaintext)),
+        print tmpl2 % (t1-t0),
+        print tmpl3 % (len(plaintext) / ((t1-t0)*1000))
         
     if 0:
         print '-'*40
@@ -423,7 +407,7 @@ def test():
         iv   = ('0000000000000000').decode('hex')
         datalen = 1024
         data = ('00'*datalen).decode('hex')
-        iter = 8
+        iter = 1244
         
         t0 = time.time()
         for i in xrange(iter):
