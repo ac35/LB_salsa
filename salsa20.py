@@ -78,6 +78,7 @@ class Salsa20(object):
         # perbarui nilai block counter
         self.state[8] = self.block_counter[0]
         self.state[9] = self.block_counter[1]
+        # state yang telah diperbaharui diproses oleh fungsi hash Salsa20
         return self.salsa20_hash()
 
     def encrypt(self, datain):
@@ -95,65 +96,66 @@ class Salsa20(object):
     decrypt = encrypt
 
     @staticmethod
-    def rol32(a, b):
+    def rotl32(a, b):
         return ((a << b) | (a >> (32 - b))) & 0xffffffff
 
     def salsa20_hash(self):  # 64 bytes in
-        """ self.state and other working strucures are lists of
-            4-byte unsigned integers (32 bits).
-            self.state merupakan
-
-            output harus dikonversi ke bytestring sebelum  return.
+        """ self.state merupakan list yang berisi angka unsigned integer berukuran 4-byte(32-bit).
+            output harus dikonversi ke bytestring sebelum return.
         """
         x = self.state[:]  # makes a copy
-        for i in xrange(self.ROUNDS):
+        for i in range(self.ROUNDS):
             if i % 2 == 0:
                 # columnround
-                x[4] ^= self.rol32((x[0] + x[12]) & 0xffffffff, 7)
-                x[8] ^= self.rol32((x[4] + x[0]) & 0xffffffff, 9)
-                x[12] ^= self.rol32((x[8] + x[4]) & 0xffffffff, 13)
-                x[0] ^= self.rol32((x[12] + x[8]) & 0xffffffff, 18)
-                x[9] ^= self.rol32((x[5] + x[1]) & 0xffffffff, 7)
-                x[13] ^= self.rol32((x[9] + x[5]) & 0xffffffff, 9)
-                x[1] ^= self.rol32((x[13] + x[9]) & 0xffffffff, 13)
-                x[5] ^= self.rol32((x[1] + x[13]) & 0xffffffff, 18)
-                x[14] ^= self.rol32((x[10] + x[6]) & 0xffffffff, 7)
-                x[2] ^= self.rol32((x[14] + x[10]) & 0xffffffff, 9)
-                x[6] ^= self.rol32((x[2] + x[14]) & 0xffffffff, 13)
-                x[10] ^= self.rol32((x[6] + x[2]) & 0xffffffff, 18)
-                x[3] ^= self.rol32((x[15] + x[11]) & 0xffffffff, 7)
-                x[7] ^= self.rol32((x[3] + x[15]) & 0xffffffff, 9)
-                x[11] ^= self.rol32((x[7] + x[3]) & 0xffffffff, 13)
-                x[15] ^= self.rol32((x[11] + x[7]) & 0xffffffff, 18)
+                x[4] ^= self.rotl32((x[0] + x[12]) & 0xffffffff, 7)
+                x[8] ^= self.rotl32((x[4] + x[0]) & 0xffffffff, 9)
+                x[12] ^= self.rotl32((x[8] + x[4]) & 0xffffffff, 13)
+                x[0] ^= self.rotl32((x[12] + x[8]) & 0xffffffff, 18)
+                x[9] ^= self.rotl32((x[5] + x[1]) & 0xffffffff, 7)
+                x[13] ^= self.rotl32((x[9] + x[5]) & 0xffffffff, 9)
+                x[1] ^= self.rotl32((x[13] + x[9]) & 0xffffffff, 13)
+                x[5] ^= self.rotl32((x[1] + x[13]) & 0xffffffff, 18)
+                x[14] ^= self.rotl32((x[10] + x[6]) & 0xffffffff, 7)
+                x[2] ^= self.rotl32((x[14] + x[10]) & 0xffffffff, 9)
+                x[6] ^= self.rotl32((x[2] + x[14]) & 0xffffffff, 13)
+                x[10] ^= self.rotl32((x[6] + x[2]) & 0xffffffff, 18)
+                x[3] ^= self.rotl32((x[15] + x[11]) & 0xffffffff, 7)
+                x[7] ^= self.rotl32((x[3] + x[15]) & 0xffffffff, 9)
+                x[11] ^= self.rotl32((x[7] + x[3]) & 0xffffffff, 13)
+                x[15] ^= self.rotl32((x[11] + x[7]) & 0xffffffff, 18)
             if i % 2 == 1:
                 # rowround
-                x[1] ^= self.rol32((x[0] + x[3]) & 0xffffffff, 7)
-                x[2] ^= self.rol32((x[1] + x[0]) & 0xffffffff, 9)
-                x[3] ^= self.rol32((x[2] + x[1]) & 0xffffffff, 13)
-                x[0] ^= self.rol32((x[3] + x[2]) & 0xffffffff, 18)
-                x[6] ^= self.rol32((x[5] + x[4]) & 0xffffffff, 7)
-                x[7] ^= self.rol32((x[6] + x[5]) & 0xffffffff, 9)
-                x[4] ^= self.rol32((x[7] + x[6]) & 0xffffffff, 13)
-                x[5] ^= self.rol32((x[4] + x[7]) & 0xffffffff, 18)
-                x[11] ^= self.rol32((x[10] + x[9]) & 0xffffffff, 7)
-                x[8] ^= self.rol32((x[11] + x[10]) & 0xffffffff, 9)
-                x[9] ^= self.rol32((x[8] + x[11]) & 0xffffffff, 13)
-                x[10] ^= self.rol32((x[9] + x[8]) & 0xffffffff, 18)
-                x[12] ^= self.rol32((x[15] + x[14]) & 0xffffffff, 7)
-                x[13] ^= self.rol32((x[12] + x[15]) & 0xffffffff, 9)
-                x[14] ^= self.rol32((x[13] + x[12]) & 0xffffffff, 13)
-                x[15] ^= self.rol32((x[14] + x[13]) & 0xffffffff, 18)
-        # OMIT FINAL XOR of initial round state
-        # for i in xrange(16):
-        # x[i] = (x[i] + self.state[i]) & 0xffffffff
+                x[1] ^= self.rotl32((x[0] + x[3]) & 0xffffffff, 7)
+                x[2] ^= self.rotl32((x[1] + x[0]) & 0xffffffff, 9)
+                x[3] ^= self.rotl32((x[2] + x[1]) & 0xffffffff, 13)
+                x[0] ^= self.rotl32((x[3] + x[2]) & 0xffffffff, 18)
+                x[6] ^= self.rotl32((x[5] + x[4]) & 0xffffffff, 7)
+                x[7] ^= self.rotl32((x[6] + x[5]) & 0xffffffff, 9)
+                x[4] ^= self.rotl32((x[7] + x[6]) & 0xffffffff, 13)
+                x[5] ^= self.rotl32((x[4] + x[7]) & 0xffffffff, 18)
+                x[11] ^= self.rotl32((x[10] + x[9]) & 0xffffffff, 7)
+                x[8] ^= self.rotl32((x[11] + x[10]) & 0xffffffff, 9)
+                x[9] ^= self.rotl32((x[8] + x[11]) & 0xffffffff, 13)
+                x[10] ^= self.rotl32((x[9] + x[8]) & 0xffffffff, 18)
+                x[12] ^= self.rotl32((x[15] + x[14]) & 0xffffffff, 7)
+                x[13] ^= self.rotl32((x[12] + x[15]) & 0xffffffff, 9)
+                x[14] ^= self.rotl32((x[13] + x[12]) & 0xffffffff, 13)
+                x[15] ^= self.rotl32((x[14] + x[13]) & 0xffffffff, 18)
+            # proses transpose ditiadakan, lanjut ke round berikutnya.
+
+        # tambahkan state dengan hasil akhir modifikasi state
+        for i in range(16):
+            x[i] = (x[i] + self.state[i]) & 0xffffffff
+        # pack output
         output = struct.pack('<16I',
                              x[0], x[1], x[2], x[3],
                              x[4], x[5], x[6], x[7],
                              x[8], x[9], x[10], x[11],
                              x[12], x[13], x[14], x[15])
-        return output  # 64 bytes out
+        return output  # keluaran bytestring berukuran 64-byte.
 
-    def xor(self, stream, din):
+    @staticmethod
+    def xor(stream, din):
         dout = []
         for i in xrange(len(din)):
             dout.append(chr(ord(stream[i]) ^ ord(din[i])))
