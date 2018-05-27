@@ -125,22 +125,22 @@ class Salsa20(object):
                 x[5], x[6], x[7], x[4] = self._quarterround(x[5], x[6], x[7], x[4])
                 x[10], x[11], x[8], x[9] = self._quarterround(x[10], x[11], x[8], x[9])
                 x[15], x[12], x[13], x[14] = self._quarterround(x[15], x[12], x[13], x[14])
-            # proses transpose ditiadakan, lanjut ke round berikutnya.
 
         # tambahkan state dengan hasil akhir modifikasi state
         for i in range(16):
             x[i] = (x[i] + self._state[i]) & self._mask
-        # pack output
+
+        # transpose hasil akhir dan pack menjadi 16-word
         output = struct.pack('<16I',
-                             x[0], x[1], x[2], x[3],
-                             x[4], x[5], x[6], x[7],
-                             x[8], x[9], x[10], x[11],
-                             x[12], x[13], x[14], x[15])
+                             x[0], x[4], x[8], x[12],
+                             x[1], x[5], x[9], x[13],
+                             x[2], x[6], x[10], x[14],
+                             x[3], x[7], x[11], x[15])
         return output  # keluaran bytestring berukuran 64-byte.
 
     def _xor(self, stream, din):
         dout = []
-        for i in xrange(len(din)):
+        for i in range(len(din)):
             dout.append(chr(ord(stream[i]) ^ ord(din[i])))
         return ''.join(dout)
 
