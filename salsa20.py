@@ -98,7 +98,14 @@ class Salsa20(object):
     decrypt = encrypt
 
     def _rotl32(self, a, b):
-        return ((a << b) | (a >> (32 - b))) & 0xffffffff
+        return ((a << b) | (a >> (32 - b))) & self._mask
+
+    def _quarterround(self, a, b, c, d):
+        b ^= self._rotl32((a + d) & self._mask, 7)
+        c ^= self._rotl32((b + a) & self._mask, 9)
+        d ^= self._rotl32((c + b) & self._mask, 13)
+        a ^= self._rotl32((d + c) & self._mask, 18)
+        return a, b, c, d
 
     def _salsa20_hash(self):  # 64 bytes in
         """ self.state merupakan list yang berisi angka unsigned integer berukuran 4-byte(32-bit).
@@ -108,45 +115,21 @@ class Salsa20(object):
         for i in range(self._rounds):
             if i % 2 == 0:
                 # columnround
-                x[4] ^= self._rotl32((x[0] + x[12]) & 0xffffffff, 7)
-                x[8] ^= self._rotl32((x[4] + x[0]) & 0xffffffff, 9)
-                x[12] ^= self._rotl32((x[8] + x[4]) & 0xffffffff, 13)
-                x[0] ^= self._rotl32((x[12] + x[8]) & 0xffffffff, 18)
-                x[9] ^= self._rotl32((x[5] + x[1]) & 0xffffffff, 7)
-                x[13] ^= self._rotl32((x[9] + x[5]) & 0xffffffff, 9)
-                x[1] ^= self._rotl32((x[13] + x[9]) & 0xffffffff, 13)
-                x[5] ^= self._rotl32((x[1] + x[13]) & 0xffffffff, 18)
-                x[14] ^= self._rotl32((x[10] + x[6]) & 0xffffffff, 7)
-                x[2] ^= self._rotl32((x[14] + x[10]) & 0xffffffff, 9)
-                x[6] ^= self._rotl32((x[2] + x[14]) & 0xffffffff, 13)
-                x[10] ^= self._rotl32((x[6] + x[2]) & 0xffffffff, 18)
-                x[3] ^= self._rotl32((x[15] + x[11]) & 0xffffffff, 7)
-                x[7] ^= self._rotl32((x[3] + x[15]) & 0xffffffff, 9)
-                x[11] ^= self._rotl32((x[7] + x[3]) & 0xffffffff, 13)
-                x[15] ^= self._rotl32((x[11] + x[7]) & 0xffffffff, 18)
+                x[0], x[4], x[8], x[12] = self._quarterround(x[0], x[4], x[8], x[12])
+                x[5], x[9], x[13], x[1] = self._quarterround(x[5], x[9], x[13], x[1])
+                x[10], x[14], x[2], x[6] = self._quarterround(x[10], x[14], x[2], x[6])
+                x[15], x[3], x[7], x[11] = self._quarterround(x[15], x[3], x[7], x[11])
             if i % 2 == 1:
                 # rowround
-                x[1] ^= self._rotl32((x[0] + x[3]) & 0xffffffff, 7)
-                x[2] ^= self._rotl32((x[1] + x[0]) & 0xffffffff, 9)
-                x[3] ^= self._rotl32((x[2] + x[1]) & 0xffffffff, 13)
-                x[0] ^= self._rotl32((x[3] + x[2]) & 0xffffffff, 18)
-                x[6] ^= self._rotl32((x[5] + x[4]) & 0xffffffff, 7)
-                x[7] ^= self._rotl32((x[6] + x[5]) & 0xffffffff, 9)
-                x[4] ^= self._rotl32((x[7] + x[6]) & 0xffffffff, 13)
-                x[5] ^= self._rotl32((x[4] + x[7]) & 0xffffffff, 18)
-                x[11] ^= self._rotl32((x[10] + x[9]) & 0xffffffff, 7)
-                x[8] ^= self._rotl32((x[11] + x[10]) & 0xffffffff, 9)
-                x[9] ^= self._rotl32((x[8] + x[11]) & 0xffffffff, 13)
-                x[10] ^= self._rotl32((x[9] + x[8]) & 0xffffffff, 18)
-                x[12] ^= self._rotl32((x[15] + x[14]) & 0xffffffff, 7)
-                x[13] ^= self._rotl32((x[12] + x[15]) & 0xffffffff, 9)
-                x[14] ^= self._rotl32((x[13] + x[12]) & 0xffffffff, 13)
-                x[15] ^= self._rotl32((x[14] + x[13]) & 0xffffffff, 18)
+                x[0], x[1], x[2], x[3] = self._quarterround(x[0], x[1], x[2], x[3])
+                x[5], x[6], x[7], x[4] = self._quarterround(x[5], x[6], x[7], x[4])
+                x[10], x[11], x[8], x[9] = self._quarterround(x[10], x[11], x[8], x[9])
+                x[15], x[12], x[13], x[14] = self._quarterround(x[15], x[12], x[13], x[14])
             # proses transpose ditiadakan, lanjut ke round berikutnya.
 
         # tambahkan state dengan hasil akhir modifikasi state
         for i in range(16):
-            x[i] = (x[i] + self._state[i]) & 0xffffffff
+            x[i] = (x[i] + self._state[i]) & self._mask
         # pack output
         output = struct.pack('<16I',
                              x[0], x[1], x[2], x[3],
@@ -155,8 +138,7 @@ class Salsa20(object):
                              x[12], x[13], x[14], x[15])
         return output  # keluaran bytestring berukuran 64-byte.
 
-    @staticmethod
-    def _xor(stream, din):
+    def _xor(self, stream, din):
         dout = []
         for i in xrange(len(din)):
             dout.append(chr(ord(stream[i]) ^ ord(din[i])))
