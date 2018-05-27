@@ -69,7 +69,10 @@ class Salsa20(object):
             self._state[13] = self._key[6]
             self._state[14] = self._key[7]
             self._state[15] = sigma[3]
-    
+
+    def _rotl32(self, a, b):
+        return ((a << b) | (a >> (32 - b))) & self._mask
+
     def _expansion(self):
         # periksa nilai block counter
         if self._block_counter[0] <= ((1 << 32) - 1):  # 4-byte, unsigned integer
@@ -83,29 +86,18 @@ class Salsa20(object):
         # state yang telah diperbaharui diproses oleh fungsi hash Salsa20
         return self._salsa20_hash()
 
-    def encrypt(self, datain):
-        """ datain dan dataout merupakan bytestring.
-            Jika data yang diberikan ke dalam fungsi ini berbentuk blok-blok (chunks)
-            Ukuran blok harus tepat 64-byte, hanya blok terakhir yang boleh kurang dari 64-byte.
-        """
-        dataout = ''
-        while datain:
-            stream = self._expansion()
-            dataout += self._xor(stream, datain[:64])
-            if len(datain) <= 64:
-                return dataout
-            datain = datain[64:]
-    decrypt = encrypt
-
-    def _rotl32(self, a, b):
-        return ((a << b) | (a >> (32 - b))) & self._mask
-
     def _quarterround(self, a, b, c, d):
         b ^= self._rotl32((a + d) & self._mask, 7)
         c ^= self._rotl32((b + a) & self._mask, 9)
         d ^= self._rotl32((c + b) & self._mask, 13)
         a ^= self._rotl32((d + c) & self._mask, 18)
         return a, b, c, d
+
+    def _xor(self, stream, din):
+        dout = []
+        for i in range(len(din)):
+            dout.append(chr(ord(stream[i]) ^ ord(din[i])))
+        return ''.join(dout)
 
     def _salsa20_hash(self):  # 64 bytes in
         """ self.state merupakan list yang berisi angka unsigned integer berukuran 4-byte(32-bit).
@@ -138,43 +130,16 @@ class Salsa20(object):
                              x[3], x[7], x[11], x[15])
         return output  # keluaran bytestring berukuran 64-byte.
 
-    def _xor(self, stream, din):
-        dout = []
-        for i in range(len(din)):
-            dout.append(chr(ord(stream[i]) ^ ord(din[i])))
-        return ''.join(dout)
-
-
-def test():
-    import sys
-    import time
-
-    key = 'qwerty7890123456'
-    # wrong_key = 'qwerty7890111111'
-    nonce = '12345678'
-
-    input_file = open(sys.argv[1], 'rb')
-    input_data = input_file.read()
-    input_file.close()
-
-    plaintext = input_data
-
-    cipher = Salsa20(key, nonce)
-    t0 = time.time()
-    ciphertext = cipher.encrypt(plaintext)
-    t1 = time.time()
-
-    tmpl1 = '  total time to encrypt %d bytes'
-    tmpl2 = ': %6.4f secs,'
-    tmpl3 = 'or about %dKB per sec'
-
-    output_file = open(sys.argv[2], 'wb')
-    output_file.write(ciphertext)
-    output_file.close()
-    print tmpl1 % (len(plaintext)),
-    print tmpl2 % (t1 - t0),
-    print tmpl3 % (len(plaintext) / ((t1 - t0) * 1000))
-
-
-if __name__ == '__main__':
-    test()
+    def encrypt(self, datain):
+        """ datain dan dataout merupakan bytestring.
+            Jika data yang diberikan ke dalam fungsi ini berbentuk blok-blok (chunks)
+            Ukuran blok harus tepat 64-byte, hanya blok terakhir yang boleh kurang dari 64-byte.
+        """
+        dataout = ''
+        while datain:
+            stream = self._expansion()
+            dataout += self._xor(stream, datain[:64])
+            if len(datain) <= 64:
+                return dataout
+            datain = datain[64:]
+    decrypt = encrypt
