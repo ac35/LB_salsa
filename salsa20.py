@@ -2,7 +2,7 @@ import struct
 
 
 class Salsa20(object):
-    def __init__(self, key, nonce='\x00' * 8, rounds=12):
+    def __init__(self, key, nonce='\x00' * 8, rounds=20):
         """ key dan nonce keduanya merupakan bytestring.
             key harus tepat berukuran 16-byte (128-bit) atau 32-byte (256-bit).
             nonce harus tepat berukuran 8-byte (64 -bit).
@@ -13,18 +13,15 @@ class Salsa20(object):
             Salsa20/12 adalah versi yang dipilih oleh eSTREAM.
             Salsa20/8 adalah versi yang lebih cepat dan masih tergolong aman.
         """
-        # inisialisasi round
         self._rounds = rounds
-
-        # inisialisasi mask
         self._mask = 0xffffffff
 
-        # inisialisasi nonce
+        # memproses nonce
         if len(nonce) != 8:
             raise Exception('nonce harus tepat berukuran 8-byte')
         self._nonce = list(struct.unpack('<2I', nonce))  # unpack nonce
 
-        # inisialisasi key
+        # memproses key
         if len(key) not in [16, 32]:
             raise Exception('Key harus tepat berukuran 16-byte atau 32-byte')
         if len(key) == 16:
@@ -32,7 +29,7 @@ class Salsa20(object):
         elif len(key) == 32:
             self._key = list(struct.unpack('<8I', key))
 
-        # inisialisasi block counter
+        # memproses block counter
         self._block_counter = [0, 0]  # block counter diberi nilai awal 0 utk setiap word
 
         tau = (0x61707865, 0x3120646e, 0x79622d36, 0x6b206574)
@@ -42,7 +39,7 @@ class Salsa20(object):
         self._state = [0] * 16
         self._state[6] = self._nonce[0]
         self._state[7] = self._nonce[1]
-        
+
         if len(key) == 16:
             self._state[0] = tau[0]
             self._state[1] = self._key[0]
@@ -99,11 +96,11 @@ class Salsa20(object):
             dout.append(chr(ord(stream[i]) ^ ord(din[i])))
         return ''.join(dout)
 
-    def _salsa20_hash(self):  # 64 bytes in
+    def _salsa20_hash(self):
         """ self.state merupakan list yang berisi angka unsigned integer berukuran 4-byte(32-bit).
             output harus dikonversi ke bytestring sebelum return.
         """
-        x = self._state[:]  # makes a copy
+        x = self._state[:]  # buat salinan state
         for i in range(self._rounds):
             if i % 2 == 0:
                 # columnround
